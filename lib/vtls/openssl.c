@@ -2654,19 +2654,22 @@ ossl_set_ssl_version_min_max(struct Curl_cfilter *cf, SSL_CTX *ctx,
   case CURL_SSLVERSION_MAX_TLSv1_3:
     ossl_ssl_version_max = TLS1_3_VERSION;
     break;
-  case CURL_SSLVERSION_MAX_NONE:  /* none selected */
-  case CURL_SSLVERSION_MAX_DEFAULT:  /* max selected */
-  default:
-    /* SSL_CTX_set_max_proto_version states that: setting the maximum to 0
-       will enable protocol versions up to the highest version supported by
-       the library */
-    ossl_ssl_version_max = 0;
-    break;
   }
 
-  if(!SSL_CTX_set_min_proto_version(ctx, ossl_ssl_version_min) ||
-     !SSL_CTX_set_max_proto_version(ctx, ossl_ssl_version_max))
+  if(!SSL_CTX_set_min_proto_version(ctx, ossl_ssl_version_min))
     return CURLE_SSL_CONNECT_ERROR;
+
+  /* Only set max version if user explicitly requested a specific version
+     via --tls-max option. When user accepts default (CURL_SSLVERSION_MAX_DEFAULT
+     or MAX_NONE), skip calling SSL_CTX_set_max_proto_version() to allow
+     OpenSSL to use its configured default from system crypto-policy.
+     This is a deliberate compromise: explicit user choice overrides system
+     policy, but system policy is respected when user doesn't specify. */
+  if(curl_ssl_version_max != CURL_SSLVERSION_MAX_NONE &&
+     curl_ssl_version_max != CURL_SSLVERSION_MAX_DEFAULT) {
+    if(!SSL_CTX_set_max_proto_version(ctx, ossl_ssl_version_max))
+      return CURLE_SSL_CONNECT_ERROR;
+  }
 
   return CURLE_OK;
 }
